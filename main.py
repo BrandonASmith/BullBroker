@@ -1,11 +1,7 @@
 # ai_engine.py
 
-import yfinance as yf
-import openai
-import os
 import streamlit as st
-import json
-from ai_engine import get_best_stock_today
+from main import get_best_stock_today  # 👈 Adjust this if it's in a different file
 
 st.set_page_config(page_title="BullBroker: Daily Stock Pick", layout="centered")
 
@@ -16,7 +12,7 @@ if st.button("📊 Get Today's Pick"):
     with st.spinner("Analyzing the market..."):
         pick = get_best_stock_today()
 
-    if pick["ticker"]:
+    if pick and "ticker" in pick:
         st.success(f"**Ticker:** {pick['ticker']}")
         st.markdown(f"**Type:** {pick['stock_type'].capitalize()}  \n**Strategy:** {pick['pick_type']}")
         st.markdown("---")
