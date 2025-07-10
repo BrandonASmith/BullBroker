@@ -2,7 +2,7 @@ import streamlit as st
 import requests
 
 # CONFIG
-API_URL = "https://yourrenderurl.com/daily-pick"  # <- Replace with your real Render URL
+API_URL = "https://bullbroker.onrender.com"  
 
 st.set_page_config(page_title="BullBroker", layout="centered")
 
