@@ -15,31 +15,37 @@ if st.button("📊 Get Today's Pick"):
             response.raise_for_status()
             data = response.json()
 
-            ticker = data.get("ticker", "N/A")
+            ticker = data.get("ticker")
             rationale = data.get("rationale", "No rationale available.")
 
-            # Extract Pick Type
-            lines = rationale.splitlines()
-            pick_type_line = next((l for l in lines if "Pick Type" in l), "")
-            pick_type = pick_type_line.split(":")[-1].strip() if ":" in pick_type_line else "Unclear"
+            # Validate ticker
+            if not ticker or not isinstance(ticker, str):
+                st.error("❌ No valid stock ticker returned. Please try again later.")
+            else:
+                # Extract pick type
+                lines = rationale.splitlines()
+                pick_type_line = next((l for l in lines if "Pick Type" in l), "")
+                pick_type = pick_type_line.split(":")[-1].strip() if ":" in pick_type_line else "Unclear"
 
-            # Display info
-            st.markdown(f"### 🏷️ Ticker: `{ticker}`")
-            st.markdown(f"**💡 Pick Type:** `{pick_type}`")
+                st.markdown(f"### 🏷️ Ticker: `{ticker}`")
+                st.markdown(f"**💡 Pick Type:** `{pick_type}`")
 
-            # 💹 Live stock data
-            stock = yf.Ticker(ticker)
-            todays_data = stock.history(period="1d")
-            current_price = todays_data["Close"].iloc[-1]
-            previous_close = stock.info.get("previousClose", current_price)
-            change = current_price - previous_close
-            percent_change = (change / previous_close) * 100
+                # Fetch live data
+                stock = yf.Ticker(ticker)
+                hist = stock.history(period="1d")
+                if hist.empty:
+                    st.warning("Could not fetch live stock data.")
+                else:
+                    current_price = hist["Close"].iloc[-1]
+                    previous_close = stock.info.get("previousClose", current_price)
+                    change = current_price - previous_close
+                    percent_change = (change / previous_close) * 100
 
-            st.markdown(f"### 💵 Live Price: ${current_price:.2f}")
-            st.markdown(f"**📉 Change:** {change:+.2f} ({percent_change:+.2f}%)")
+                    st.markdown(f"### 💵 Live Price: ${current_price:.2f}")
+                    st.markdown(f"**📉 Change:** {change:+.2f} ({percent_change:+.2f}%)")
 
-            st.markdown("### 🧠 AI Rationale")
-            st.write(rationale)
+                st.markdown("### 🧠 AI Rationale")
+                st.write(rationale)
 
         except Exception as e:
             st.error(f"Failed to fetch data: {e}")
