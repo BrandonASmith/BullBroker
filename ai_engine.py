@@ -1,144 +1,160 @@
 import os
+import random
 import openai
 import yfinance as yf
-from datetime import datetime
-import random
-import json
+from datetime import datetime, timedelta
 
+# Set OpenAI API key
 openai.api_key = os.getenv("OPENAI_API_KEY")
+if not openai.api_key:
+    raise RuntimeError("❌ OPENAI_API_KEY is not set.")
 
-# Categorized Ticker Universe for BullBroker
-categorized_tickers = {
-    'speculative': [
-        "PLTR", "RIVN", "DNA", "IONQ", "SOUN", "BBAI", "ASTR", "NKLA", "CANO", "FFIE",
-        "JOBY", "ACHR", "EVGO", "QS", "CVNA", "UPST", "BEEM", "XPEV", "LI", "GDRX",
-        "LMND", "RUN", "HOOD", "NU", "PATH", "OPEN", "RENT", "ENVX", "WBD", "VYGR"
-    ],
-    'growth': [
-        "TSLA", "NVDA", "AMD", "CELH", "MELI", "SHOP", "TTD", "ZS", "DDOG", "CRWD",
-        "SNOW", "NET", "DOCN", "FVRR", "ASAN", "U", "BILL", "GLBE", "ROKU", "COIN",
-        "ESTC", "ENPH", "MDB", "SMCI", "TWLO", "S", "LULU", "ABNB", "MOD", "ON"
-    ],
-    'blue_chip': [
-        "AAPL", "MSFT", "GOOGL", "AMZN", "META", "JNJ", "V", "MA", "WMT", "KO",
-        "PEP", "PG", "UNH", "HD", "CVX", "XOM", "MCD", "NKE", "JPM", "DIS",
-        "LLY", "AVGO", "ADBE", "MRK", "ABBV", "BAC", "TMO", "TXN", "LIN", "DHR"
-    ],
-    'etfs': [
-        "SPY", "QQQ", "VTI", "VOO", "ARKK", "SOXX", "XLF", "XLK", "VGT", "SMH",
-        "IWM", "XLE", "XLV", "DIA", "TAN", "ICLN", "XLY", "XLC", "VHT", "VNQ"
-    ],
-    'value': [
-        "KO", "PFE", "CVX", "XOM", "IBM", "WBA", "MMM", "T", "VZ", "C",
-        "BAC", "GM", "F", "KHC", "MO", "INTC", "CSCO", "CVS", "BMY", "WFC",
-        "PGR", "USB", "BK", "MET", "PRU", "NTRS", "ALL", "AFL", "SYY", "O"
-    ],
-    'penny': [
-        "HUSA", "IMPP", "BRQS", "COSM", "GNS", "CEI", "INPX", "BBIG", "SNDL", "TRKA",
-        "IDEX", "HCDI", "AITX", "PROG", "ABVC", "VTGN", "PHUN", "OPK", "CLNN", "NBY"
-    ]
-}
+# Define categorized ticker groups
+blue_chip_stocks = ["AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "UNH", "JNJ", "PG", "V", "MA", "HD", "MRK"]
+growth_stocks = ["TSLA", "SHOP", "SQ", "UBER", "ABNB", "CRWD", "ZS", "NET", "DDOG", "SNOW", "MDB", "PLTR"]
+speculative_stocks = ["AMPX", "BIG", "WISH", "NKLA", "BBIG", "SOUN", "AI", "BBAI", "NIO", "RIVN"]
+value_stocks = ["KO", "PEP", "WMT", "CVX", "XOM", "PFE", "INTC", "CSCO", "MDLZ", "ORCL"]
+etf_stocks = ["SPY", "QQQ", "VTI", "ARKK", "DIA", "IWM", "XLF", "XLV", "XLK", "XLE", "SCHD", "SCHB"]
+penny_stocks = ["TRKA", "HUSA", "MULN", "COSM", "BRDS", "GFAI", "SINT", "AVGR", "VINE"]
 
-# Flatten to one list for model sampling
-top_stock_tickers = list(set(sum(categorized_tickers.values(), [])))
+# Combine all tickers
+top_stock_tickers = list(set(
+    blue_chip_stocks + growth_stocks + speculative_stocks + value_stocks + etf_stocks + penny_stocks
+))
 
+# Classify ticker
+def classify_ticker(ticker):
+    if ticker in blue_chip_stocks:
+        return "blue chip"
+    elif ticker in growth_stocks:
+        return "growth"
+    elif ticker in speculative_stocks:
+        return "speculative"
+    elif ticker in value_stocks:
+        return "value"
+    elif ticker in etf_stocks:
+        return "ETF"
+    elif ticker in penny_stocks:
+        return "penny"
+    return "unclassified"
+
+# Determine pick type
+def determine_pick_type(data):
+    recent = data.get("change_month", 0)
+    long_term = data.get("change_year", 0)
+
+    if long_term > 25 and recent > 5:
+        return "Long Hold"
+    elif recent < -5 and long_term < 0:
+        return "Short Sell"
+    elif long_term > 10:
+        return "Long Hold"
+    elif recent < -10:
+        return "Short Sell"
+    return "Long Hold"
+
+# Pull stock info
 def get_stock_summary(ticker):
     try:
         stock = yf.Ticker(ticker)
-        hist = stock.history(period="6mo")
-        if hist.empty or len(hist) < 60:
+        info = stock.info
+
+        # Price history
+        today = datetime.now()
+        history = stock.history(period="1y")
+        if history.empty or "Close" not in history:
             return None
 
-        current_price = hist["Close"].iloc[-1]
-        prev_day_price = hist["Close"].iloc[-2]
-        one_month_price = hist["Close"].iloc[-22]
+        current_price = history["Close"][-1]
+        month_ago = today - timedelta(days=30)
+        year_ago = today - timedelta(days=365)
 
-        day_change = ((current_price - prev_day_price) / prev_day_price) * 100
-        month_change = ((current_price - one_month_price) / one_month_price) * 100
-        sma_50 = hist["Close"].rolling(window=50).mean().iloc[-1]
-        sma_200 = hist["Close"].rolling(window=200).mean().iloc[-1]
-        rsi = 100 - (100 / (1 + hist["Close"].pct_change().dropna().rolling(14).mean().iloc[-1]))
+        past_month = history.loc[history.index >= month_ago]
+        past_year = history.loc[history.index >= year_ago]
 
-        info = stock.info
+        change_month = ((past_month["Close"][-1] - past_month["Close"][0]) / past_month["Close"][0]) * 100 if len(past_month) > 1 else 0
+        change_year = ((past_year["Close"][-1] - past_year["Close"][0]) / past_year["Close"][0]) * 100 if len(past_year) > 1 else 0
 
         return {
             "ticker": ticker,
-            "company": info.get("shortName", ""),
+            "name": info.get("shortName", ""),
             "sector": info.get("sector", ""),
-            "summary": info.get("longBusinessSummary", ""),
-            "price": round(current_price, 2),
-            "change_day": round(day_change, 2),
-            "change_month": round(month_change, 2),
-            "rsi": round(rsi, 2),
-            "sma_50": round(sma_50, 2),
-            "sma_200": round(sma_200, 2)
+            "marketCap": info.get("marketCap", 0),
+            "currentPrice": current_price,
+            "change_month": round(change_month, 2),
+            "change_year": round(change_year, 2),
+            "classification": classify_ticker(ticker)
         }
-    except Exception as e:
-        print(f"❌ Error for {ticker}: {e}")
+    except Exception:
         return None
 
+# Select best stock
 def choose_top_candidate():
+    valid = []
     random.shuffle(top_stock_tickers)
+
     for ticker in top_stock_tickers:
         summary = get_stock_summary(ticker)
         if summary:
-            return summary
+            valid.append(summary)
+        if len(valid) >= 5:
+            break
+
+    if valid:
+        sorted_valid = sorted(valid, key=lambda x: x["change_month"], reverse=True)
+        return sorted_valid[0]
     return None
 
+# Create rationale
 def generate_stock_pick_rationale(summary):
-    if not summary:
-        return {"ticker": None, "rationale": "No valid pick generated today."}
+    ticker = summary["ticker"]
+    classification = summary["classification"]
+    pick_type = determine_pick_type(summary)
 
-    today = datetime.now().strftime("%B %d, %Y")
+    prompt = (
+        f"You are a financial analyst. Based on current market trends, "
+        f"news, macroeconomic factors, and recent stock movement, explain why {ticker} "
+        f"is the top stock pick today. Clearly state the investment classification ({classification}), "
+        f"the recommended action type ({pick_type}), and a reasonable price target. "
+        f"Use data-driven analysis with a confident tone."
+    )
 
-    prompt = f"""
-You are BullBroker, a financial AI that selects ONE stock to recommend today based on the following real market data.
+    response = openai.ChatCompletion.create(
+        model="gpt-4",
+        messages=[
+            {"role": "system", "content": "You are an expert financial strategist."},
+            {"role": "user", "content": prompt}
+        ],
+        temperature=0.7,
+        max_tokens=500
+    )
 
-Today's date: {today}
+    return response.choices[0].message["content"].strip(), pick_type
 
-Stock: {summary['ticker']} ({summary['company']})
-Sector: {summary['sector']}
-Price: ${summary['price']}
-1-Day % Change: {summary['change_day']}%
-1-Month % Change: {summary['change_month']}%
-RSI: {summary['rsi']}
-50-day SMA: {summary['sma_50']}
-200-day SMA: {summary['sma_200']}
-Business Summary: {summary['summary']}
-
-Rules:
-- If RSI > 50, price above 50SMA and 200SMA, and recent gains → "Long Hold"
-- If RSI < 45, price below both SMAs and recent losses → "Short Sell"
-- Otherwise pick the strongest candidate for either direction — no uncertainty
-- You MUST specify:
-    - "pick_type": either "Long Hold" or "Short Sell"
-    - "stock_class": growth, speculative, blue chip, value, ETF, penny, etc.
-    - "target_price": realistic 1–6 month price target
-    - "rationale": a paragraph explaining the decision
-- Reply ONLY with a valid JSON object
-
-Format:
-{{
-  "ticker": "{summary['ticker']}",
-  "pick_type": "Long Hold",
-  "stock_class": "growth",
-  "target_price": 250.00,
-  "rationale": "This stock is riding upward momentum, trading above both 50 and 200 day SMAs, with RSI at 63. Analysts project continued strength given earnings and tech growth sector tailwinds."
-}}
-"""
-
-    try:
-        response = openai.ChatCompletion.create(
-            model="gpt-4",
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.3,
-            max_tokens=400,
-        )
-        content = response.choices[0].message["content"]
-        return json.loads(content)
-    except Exception as e:
-        return {"ticker": None, "rationale": f"OpenAI Error: {str(e)}"}
-
-def get_best_stock_pick():
+# Main export
+def get_today_stock_pick():
     summary = choose_top_candidate()
-    return generate_stock_pick_rationale(summary)
+
+    if summary:
+        try:
+            rationale, pick_type = generate_stock_pick_rationale(summary)
+        except Exception as e:
+            rationale = "AI failed to generate a rationale."
+            pick_type = determine_pick_type(summary)
+    else:
+        return {
+            "ticker": None,
+            "pick_type": None,
+            "classification": None,
+            "rationale": "No valid pick generated today."
+        }
+
+    return {
+        "ticker": summary["ticker"],
+        "classification": summary["classification"],
+        "pick_type": pick_type,
+        "current_price": summary["currentPrice"],
+        "change_month": summary["change_month"],
+        "change_year": summary["change_year"],
+        "rationale": rationale
+    }
