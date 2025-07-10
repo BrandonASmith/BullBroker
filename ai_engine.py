@@ -83,9 +83,12 @@ def generate_stock_pick_rationale(ticker: str, pick_type: str) -> str:
 
 def get_daily_pick() -> dict:
     ticker = random.choice(TRACKED_TICKERS)
+    print(f"🧪 Trying ticker: {ticker}")
+    
     stock_data = get_live_stock_data(ticker)
 
-    if not stock_data:
+    if not stock_data or stock_data.get("price") is None:
+        print(f"❌ No valid stock data returned for {ticker}")
         return {"ticker": None, "pick_type": None, "price": None, "rationale": "No data available."}
 
     pick_type = determine_pick_type(stock_data["change"], stock_data["percent"])
