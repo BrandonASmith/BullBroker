@@ -11,7 +11,7 @@ openai.api_key = os.getenv("OPENAI_API_KEY")
 stock_tracker = {
     "blue_chip": ["AAPL", "MSFT", "GOOGL", "JNJ", "JPM", "PG", "V", "NVDA", "UNH", "MA"],
     "growth": ["TSLA", "SHOP", "SQ", "ROKU", "ETSY", "SE", "U", "COIN", "NET", "DDOG"],
-    "speculative": ["DNA", "ASTR", "BBIG", "MNMD", "IDEX", "FCEL", "NNDM", "SNDL", "BBAI", "AI"],
+    "speculative": ["DNA", "ASTR", "BBIG", "MNMD", "FCEL", "NNDM", "SNDL", "BBAI", "AI"],
     "etf": ["SPY", "QQQ", "VTI", "ARKK", "XLF", "XLE", "XLV", "IWM", "EEM", "DIA"],
     "value": ["WMT", "KO", "PEP", "MCD", "T", "VZ", "PFE", "MRK", "INTC", "CSCO"],
     "penny": ["HCMC", "ZOM", "SNDL", "ENZC", "AITX", "CTRM", "CEI", "INND", "ILUS", "PHIL"]
