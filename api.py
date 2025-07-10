@@ -1,17 +1,20 @@
+# api.py
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-import random
+from your_module_name import generate_daily_stock_pick  # adjust this import as needed
 
 app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.get("/daily-pick")
+def get_daily_pick():
+    return generate_daily_stock_pick()
 
 class StockPick(BaseModel):
     ticker: str
