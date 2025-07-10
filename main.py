@@ -1,56 +1,30 @@
-# api.py
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from ai_engine import generate_daily_stock_pick
+# ai_engine.py
 
-app = FastAPI()
+import yfinance as yf
+import openai
+import os
+import json
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+openai.api_key = os.getenv("OPENAI_API_KEY")
 
-@app.get("/daily-pick")
-def get_daily_pick():
-    result = generate_daily_stock_pick()
-    return result
+# Grouped list of quality tickers
+TRACKED_STOCKS = {
+    "blue_chip": ["AAPL", "MSFT", "JNJ", "V", "PG"],
+    "growth": ["NVDA", "TSLA", "AMZN", "META", "GOOGL"],
+    "speculative": ["PLTR", "SOFI", "RIVN", "IONQ", "ARKK"],
+    "etf": ["SPY", "QQQ", "VTI", "DIA", "ARKK"],
+    "value": ["WMT", "CVX", "PFE", "INTC", "KO"],
+    "penny": ["GFAI", "COSM", "MMAT", "HCDI", "IDEX"]
+}
 
-
-class StockPick(BaseModel):
-    ticker: str
-    rationale: str
-    pick_type: str
-    stock_type: str
-
-# Simulated stock categories
-stocks = [
-    {"ticker": "TSLA", "type": "growth"},
-    {"ticker": "NVDA", "type": "blue chip"},
-    {"ticker": "PLTR", "type": "speculative"},
-    {"ticker": "AAPL", "type": "blue chip"},
-    {"ticker": "SOXL", "type": "ETF"},
-    {"ticker": "MARA", "type": "speculative"},
-    {"ticker": "AMZN", "type": "growth"},
-    {"ticker": "AMD", "type": "growth"},
-    {"ticker": "TQQQ", "type": "ETF"},
-    {"ticker": "CLSK", "type": "penny"}
-]
-
-@app.get("/daily-pick", response_model=StockPick)
-def get_daily_pick():
+def fetch_stock_summary(ticker):
     try:
-        pick = random.choice(stocks)
-        pick_type = "Long Hold" if pick["type"] in ["blue chip", "ETF", "growth"] else "Short Sell"
-        rationale = f"{pick['ticker']} is a {pick['type']} stock showing strong relative momentum. Ideal for a {pick_type} position based on recent trend data and analyst consensus. Target price: +12% from current level."
-
-        return StockPick(
-            ticker=pick["ticker"],
-            rationale=rationale,
-            pick_type=pick_type,
-            stock_type=pick["type"]
-        )
-    except Exception as e:
-        return {"ticker": None, "rationale": f"Error: {str(e)}"}
-
+        info = yf.Ticker(ticker).info
+        return {
+            "ticker": ticker,
+            "summary": {
+                "currentPrice": info.get("currentPrice"),
+                "marketCap": info.get("marketCap"),
+                "fiftyTwoWeekHigh": info.get("fiftyTwoWeekHigh"),
+                "fiftyTwoWeekLow": info.get("fiftyTwoWeekLow"),
+                "sector": info.ge
