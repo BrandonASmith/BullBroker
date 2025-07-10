@@ -2,104 +2,104 @@ import os
 import openai
 import random
 import yfinance as yf
-from datetime import datetime
-from dotenv import load_dotenv
+from datetime import datetime, timedelta
 
-# Load environment variables from .env file (optional for local dev)
-load_dotenv()
-
-# Set your OpenAI API key
 openai.api_key = os.getenv("OPENAI_API_KEY")
-if not openai.api_key:
-    raise RuntimeError("❌ OPENAI_API_KEY is not set.")
 
-# List of tracked stocks (500 high-quality tickers)
-TRACKED_TICKERS = [
-    "AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "META", "TSLA", "AVGO", "V", "UNH", "XOM", "JPM", "LLY", "MA", "JNJ", "PG",
-    "HD", "ORCL", "COST", "MRK", "CVX", "ABBV", "ADBE", "PEP", "BAC", "NFLX", "TMO", "KO", "WMT", "AMD", "DIS", "QCOM",
-    "INTC", "CRM", "MCD", "VZ", "ABT", "ACN", "TXN", "NEE", "LIN", "DHR", "BMY", "NKE", "AMGN", "MDT", "IBM", "LOW",
-    "SBUX", "GS", "NOW", "ISRG", "GE", "SPGI", "BLK", "LRCX", "BKNG", "PLD", "CAT", "CHTR", "VRTX", "PANW", "AXP",
-    "ADI", "REGN", "TGT", "CI", "MO", "CSCO", "ZTS", "PFE", "CB", "DE", "MMC", "C", "SYK", "ETN", "FISV", "TMUS",
-    "ELV", "ADP", "EQIX", "SO", "BDX", "DUK", "GILD", "CL", "ATVI", "PSX", "AON", "AEP", "WM", "HCA", "NSC", "COF",
-    "ADSK", "TRV", "EMR", "FDX", "WELL", "ECL", "APD", "ILMN", "D", "ADM", "KDP", "ROST", "HPQ", "WBA", "KHC", "MNST",
-    "TSCO", "DAL", "ROKU", "LUV", "OKE", "EXPE", "TTWO", "ETSY", "ALGN", "MTCH", "FSLR", "NET", "ZS", "DDOG", "DOCU",
-    "RIVN", "U", "PATH", "PLTR", "SNOW", "MDB", "SHOP", "SQ", "COIN", "ARKK", "SMCI", "ENPH", "SEDG", "F", "GM", "UBER"
+# Top 500 stock tickers (sample for now, replace with your list if needed)
+top_stock_tickers = [
+    "AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "META", "TSLA", "BRK-B", "JPM", "V",
+    "UNH", "AVGO", "JNJ", "WMT", "MA", "XOM", "LLY", "PG", "ORCL", "HD", "COST",
+    "MRK", "CVX", "PEP", "ABBV", "ADBE", "BAC", "KO", "NFLX", "ACN", "TMO", "AMD",
+    "ABT", "CRM", "INTC", "DHR", "MCD", "NKE", "VZ", "TXN", "WFC", "LIN", "NEE",
+    "QCOM", "UPS", "PM", "LOW", "MS", "BMY", "AMAT", "SBUX", "INTU", "GS", "IBM",
+    "RTX", "PLD", "CAT", "HON", "BLK", "GE", "AMGN", "DE", "ISRG", "ADI", "MDT"
+    # Add more tickers to reach 500 as needed
 ]
 
-def get_live_stock_data(ticker: str) -> dict:
+def get_stock_summary(ticker):
     try:
         stock = yf.Ticker(ticker)
-        hist = stock.history(period="1mo")
-
+        info = stock.info
+        hist = stock.history(period="5d")
         if hist.empty:
-            raise ValueError("No price data found")
+            return None
 
-        last_quote = hist.iloc[-1]
-        previous_quote = hist.iloc[-2]
+        close = hist["Close"].iloc[-1]
+        previous_close = hist["Close"].iloc[-2]
+        percent_change = ((close - previous_close) / previous_close) * 100
 
         return {
-            "price": round(last_quote["Close"], 2),
-            "change": round(last_quote["Close"] - previous_quote["Close"], 2),
-            "percent": round(((last_quote["Close"] - previous_quote["Close"]) / previous_quote["Close"]) * 100, 2),
-            "history": hist
+            "ticker": ticker,
+            "company": info.get("shortName", ""),
+            "sector": info.get("sector", ""),
+            "marketCap": info.get("marketCap", 0),
+            "summary": info.get("longBusinessSummary", ""),
+            "price": round(close, 2),
+            "change": round(percent_change, 2),
         }
-    except Exception as e:
-        print(f"❌ Error fetching stock data for {ticker}: {e}")
-        return {}
+    except Exception:
+        return None
 
-def determine_pick_type(change: float, percent: float) -> str:
-    if percent > 5:
-        return "Momentum"
-    elif percent < -5:
-        return "Contrarian"
-    elif change > 0:
-        return "Growth"
-    elif change < 0:
-        return "Value"
-    else:
-        return "Neutral"
+def choose_top_candidate():
+    random.shuffle(top_stock_tickers)
+    for ticker in top_stock_tickers:
+        summary = get_stock_summary(ticker)
+        if summary:
+            return summary
+    return None
 
-def generate_stock_pick_rationale(ticker: str, pick_type: str) -> str:
-    today = datetime.now().strftime("%B %d, %Y")
+def generate_stock_pick_rationale(summary):
+    if not summary:
+        return {"ticker": None, "rationale": "No valid pick generated today."}
 
-    prompt = (
-        f"As of {today}, explain why {ticker} is a strong {pick_type} investment pick today. "
-        "Factor in market trends, sector performance, recent news, and technical indicators. "
-        "Explain it like an expert financial strategist writing to a curious but non-professional trader. "
-        "Make it persuasive and insightful in under 150 words."
-    )
+    prompt = f"""
+You are a financial strategist and expert stock analyst. Given the following stock data, generate an investment rationale.
+
+Stock: {summary["ticker"]} ({summary["company"]})
+Sector: {summary["sector"]}
+Market Cap: {summary["marketCap"]}
+Current Price: ${summary["price"]}
+1-Day % Change: {summary["change"]}%
+Business Summary: {summary["summary"]}
+
+Your task:
+- Recommend this stock only if it is truly the BEST pick today.
+- Specify the investment type: "Long Hold" (for strong long-term plays) or "Short Sell" (if the stock will likely decline soon).
+- Provide a target price (higher for long, lower for short).
+- Classify the stock (e.g., growth, value, speculative, blue chip).
+- Give a compelling reason using insights from recent trends, momentum, and overall market conditions.
+
+Respond in this JSON format ONLY:
+{{
+  "ticker": "AAPL",
+  "pick_type": "Long Hold",
+  "target_price": 230.00,
+  "stock_class": "blue chip",
+  "rationale": "Apple continues to outperform expectations with strong hardware and service sales. With AI integration expected in iOS 19 and global iPhone upgrades accelerating, AAPL has momentum. Based on current patterns, it may rise to $230 in the next quarter."
+}}
+    """
 
     try:
         response = openai.ChatCompletion.create(
             model="gpt-4",
             messages=[{"role": "user", "content": prompt}],
-            max_tokens=300,
-            temperature=0.7,
+            temperature=0.3,
         )
-        return response.choices[0].message.content.strip()
+
+        content = response.choices[0].message["content"]
+
+        # Safe parsing of JSON output
+        import json
+        parsed = json.loads(content)
+        if "ticker" in parsed and "rationale" in parsed:
+            return parsed
+        else:
+            return {"ticker": None, "rationale": "AI returned malformed result."}
+
     except Exception as e:
-        print("❌ GPT Error:", e)
-        return "No rationale received"
+        return {"ticker": None, "rationale": f"OpenAI Error: {str(e)}"}
 
-def get_daily_pick() -> dict:
-    ticker = random.choice(TRACKED_TICKERS)
-    print(f"🧪 Trying ticker: {ticker}")
-    
-    stock_data = get_live_stock_data(ticker)
-
-    if not stock_data or stock_data.get("price") is None:
-        print(f"❌ No valid stock data returned for {ticker}")
-        return {"ticker": None, "pick_type": None, "price": None, "rationale": "No data available."}
-
-    pick_type = determine_pick_type(stock_data["change"], stock_data["percent"])
-    rationale = generate_stock_pick_rationale(ticker, pick_type)
-
-    return {
-        "ticker": ticker,
-        "pick_type": pick_type,
-        "price": stock_data["price"],
-        "change": stock_data["change"],
-        "percent": stock_data["percent"],
-        "rationale": rationale,
-        "history": stock_data["history"]
-    }
+def get_best_stock_pick():
+    summary = choose_top_candidate()
+    return generate_stock_pick_rationale(summary)
