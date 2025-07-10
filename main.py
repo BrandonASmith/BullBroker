@@ -1,27 +1,30 @@
 from fastapi import FastAPI
-from stock_data import fetch_stock_summary
+from fastapi.middleware.cors import CORSMiddleware
 from ai_engine import generate_stock_pick_rationale
+import uvicorn
 
 app = FastAPI()
 
-STOCK_POOL = ['AAPL']  # Limit to 1 ticker for speed
+# CORS setup to allow frontend to talk to backend
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # You can restrict this in production
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+@app.get("/")
+def health():
+    return {"status": "ok"}
 
 @app.get("/daily-pick")
-def daily_stock_pick():
+def daily_pick():
     try:
-        ticker = 'AAPL'
-        print(f"📊 Trying: {ticker}")
-        summary = fetch_stock_summary(ticker)
-        print(f"📄 Summary: {summary}")
-
-        rationale = generate_stock_pick_rationale(str(summary), ticker)
-        print(f"💬 GPT Output:\n{rationale}")
-
-        return {
-            "ticker": ticker,
-            "rationale": rationale or "No rationale received"
-        }
-
+        result = generate_stock_pick_rationale()
+        return result
     except Exception as e:
-        print(f"❌ Error: {e}")
-        return {"ticker": None, "rationale": "Backend error."}
+        return {"ticker": None, "rationale": f"Error: {str(e)}"}
+
+if __name__ == "__main__":
+    uvicorn.run("main:app", host="0.0.0.0", port=10000)
