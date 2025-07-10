@@ -1,7 +1,7 @@
 # api.py
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from ai_engine.py import generate_daily_stock_pick  # adjust this import as needed
+from ai_engine import generate_daily_stock_pick  # adjust this import as needed
 
 app = FastAPI()
 
