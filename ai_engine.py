@@ -61,7 +61,7 @@ def generate_stock_pick_rationale():
         data = fetch_stock_data(ticker)
         if data:
             candidates.append((ticker, data))
-        if len(candidates) >= 10:  # limit how many we analyze at once
+        if len(candidates) >= 10:
             break
 
     if not candidates:
@@ -70,7 +70,6 @@ def generate_stock_pick_rationale():
             "rationale": "No valid pick generated today."
         }
 
-    # Format data for prompt
     formatted_data = "\n".join([
         f"{ticker}: {json.dumps(data)}"
         for ticker, data in candidates
@@ -120,7 +119,7 @@ Return only this JSON:
         print("[AI ERROR]:", e)
         return {
             "ticker": None,
-            "rationale": "No valid pick generated today."
+            "rationale": f"Error: {str(e)}"
         }
 
 # Optional: test run
