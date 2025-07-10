@@ -1,160 +1,128 @@
 import os
-import random
 import openai
 import yfinance as yf
-from datetime import datetime, timedelta
+import json
+import datetime
 
-# Set OpenAI API key
+# Load OpenAI key
 openai.api_key = os.getenv("OPENAI_API_KEY")
-if not openai.api_key:
-    raise RuntimeError("❌ OPENAI_API_KEY is not set.")
 
-# Define categorized ticker groups
-blue_chip_stocks = ["AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "UNH", "JNJ", "PG", "V", "MA", "HD", "MRK"]
-growth_stocks = ["TSLA", "SHOP", "SQ", "UBER", "ABNB", "CRWD", "ZS", "NET", "DDOG", "SNOW", "MDB", "PLTR"]
-speculative_stocks = ["AMPX", "BIG", "WISH", "NKLA", "BBIG", "SOUN", "AI", "BBAI", "NIO", "RIVN"]
-value_stocks = ["KO", "PEP", "WMT", "CVX", "XOM", "PFE", "INTC", "CSCO", "MDLZ", "ORCL"]
-etf_stocks = ["SPY", "QQQ", "VTI", "ARKK", "DIA", "IWM", "XLF", "XLV", "XLK", "XLE", "SCHD", "SCHB"]
-penny_stocks = ["TRKA", "HUSA", "MULN", "COSM", "BRDS", "GFAI", "SINT", "AVGR", "VINE"]
+# -----------------------------
+# === STOCK UNIVERSE GROUPS ===
+# -----------------------------
+blue_chip_stocks = ["AAPL", "MSFT", "GOOGL", "NVDA", "AMZN", "JPM", "UNH", "PG", "V", "XOM"]
+growth_stocks = ["TSLA", "SHOP", "U", "CRWD", "NET", "PLTR", "ABNB", "SNOW", "DDOG", "MDB"]
+speculative_stocks = ["AI", "BBAI", "DNA", "IDEX", "NVOS", "ASTS", "SOUN", "IONQ", "LIFW", "MVIS"]
+etfs = ["QQQ", "SPY", "VTI", "ARKK", "XLK", "SMH", "SOXX", "IWM", "XLF", "XLE"]
+value_stocks = ["PEP", "KO", "MCD", "WMT", "HD", "CVX", "TGT", "LMT", "BA", "IBM"]
+penny_stocks = ["PLUG", "FCEL", "NKLA", "RIG", "TLRY", "HUSA", "CEI", "BBIG", "WISH", "GROM"]
 
-# Combine all tickers
-top_stock_tickers = list(set(
-    blue_chip_stocks + growth_stocks + speculative_stocks + value_stocks + etf_stocks + penny_stocks
-))
+# Combine into one master list
+stock_universe = (
+    blue_chip_stocks +
+    growth_stocks +
+    speculative_stocks +
+    etfs +
+    value_stocks +
+    penny_stocks
+)
 
-# Classify ticker
-def classify_ticker(ticker):
-    if ticker in blue_chip_stocks:
-        return "blue chip"
-    elif ticker in growth_stocks:
-        return "growth"
-    elif ticker in speculative_stocks:
-        return "speculative"
-    elif ticker in value_stocks:
-        return "value"
-    elif ticker in etf_stocks:
-        return "ETF"
-    elif ticker in penny_stocks:
-        return "penny"
-    return "unclassified"
-
-# Determine pick type
-def determine_pick_type(data):
-    recent = data.get("change_month", 0)
-    long_term = data.get("change_year", 0)
-
-    if long_term > 25 and recent > 5:
-        return "Long Hold"
-    elif recent < -5 and long_term < 0:
-        return "Short Sell"
-    elif long_term > 10:
-        return "Long Hold"
-    elif recent < -10:
-        return "Short Sell"
-    return "Long Hold"
-
-# Pull stock info
-def get_stock_summary(ticker):
+# -----------------------------
+# === DATA COLLECTION LOGIC ===
+# -----------------------------
+def fetch_stock_data(ticker):
     try:
         stock = yf.Ticker(ticker)
         info = stock.info
-
-        # Price history
-        today = datetime.now()
-        history = stock.history(period="1y")
-        if history.empty or "Close" not in history:
-            return None
-
-        current_price = history["Close"][-1]
-        month_ago = today - timedelta(days=30)
-        year_ago = today - timedelta(days=365)
-
-        past_month = history.loc[history.index >= month_ago]
-        past_year = history.loc[history.index >= year_ago]
-
-        change_month = ((past_month["Close"][-1] - past_month["Close"][0]) / past_month["Close"][0]) * 100 if len(past_month) > 1 else 0
-        change_year = ((past_year["Close"][-1] - past_year["Close"][0]) / past_year["Close"][0]) * 100 if len(past_year) > 1 else 0
-
-        return {
-            "ticker": ticker,
-            "name": info.get("shortName", ""),
-            "sector": info.get("sector", ""),
-            "marketCap": info.get("marketCap", 0),
-            "currentPrice": current_price,
-            "change_month": round(change_month, 2),
-            "change_year": round(change_year, 2),
-            "classification": classify_ticker(ticker)
+        history = stock.history(period="5d")
+        summary = {
+            "name": info.get("shortName"),
+            "sector": info.get("sector"),
+            "marketCap": info.get("marketCap"),
+            "volume": info.get("volume"),
+            "previousClose": info.get("previousClose"),
+            "50DayAverage": info.get("fiftyDayAverage"),
+            "200DayAverage": info.get("twoHundredDayAverage"),
+            "1moHistory": history.tail(5).to_dict()
         }
-    except Exception:
+        return summary
+    except Exception as e:
+        print(f"Error fetching data for {ticker}: {e}")
         return None
 
-# Select best stock
-def choose_top_candidate():
-    valid = []
-    random.shuffle(top_stock_tickers)
+# -----------------------------
+# === MAIN AI DECISION ENGINE ===
+# -----------------------------
+def generate_stock_pick_rationale():
+    today = datetime.date.today().isoformat()
+    candidates = []
 
-    for ticker in top_stock_tickers:
-        summary = get_stock_summary(ticker)
-        if summary:
-            valid.append(summary)
-        if len(valid) >= 5:
+    for ticker in stock_universe:
+        data = fetch_stock_data(ticker)
+        if data:
+            candidates.append((ticker, data))
+        if len(candidates) >= 10:  # limit how many we analyze at once
             break
 
-    if valid:
-        sorted_valid = sorted(valid, key=lambda x: x["change_month"], reverse=True)
-        return sorted_valid[0]
-    return None
-
-# Create rationale
-def generate_stock_pick_rationale(summary):
-    ticker = summary["ticker"]
-    classification = summary["classification"]
-    pick_type = determine_pick_type(summary)
-
-    prompt = (
-        f"You are a financial analyst. Based on current market trends, "
-        f"news, macroeconomic factors, and recent stock movement, explain why {ticker} "
-        f"is the top stock pick today. Clearly state the investment classification ({classification}), "
-        f"the recommended action type ({pick_type}), and a reasonable price target. "
-        f"Use data-driven analysis with a confident tone."
-    )
-
-    response = openai.ChatCompletion.create(
-        model="gpt-4",
-        messages=[
-            {"role": "system", "content": "You are an expert financial strategist."},
-            {"role": "user", "content": prompt}
-        ],
-        temperature=0.7,
-        max_tokens=500
-    )
-
-    return response.choices[0].message["content"].strip(), pick_type
-
-# Main export
-def get_today_stock_pick():
-    summary = choose_top_candidate()
-
-    if summary:
-        try:
-            rationale, pick_type = generate_stock_pick_rationale(summary)
-        except Exception as e:
-            rationale = "AI failed to generate a rationale."
-            pick_type = determine_pick_type(summary)
-    else:
+    if not candidates:
         return {
             "ticker": None,
-            "pick_type": None,
-            "classification": None,
             "rationale": "No valid pick generated today."
         }
 
-    return {
-        "ticker": summary["ticker"],
-        "classification": summary["classification"],
-        "pick_type": pick_type,
-        "current_price": summary["currentPrice"],
-        "change_month": summary["change_month"],
-        "change_year": summary["change_year"],
-        "rationale": rationale
-    }
+    # Format data for prompt
+    formatted_data = "\n".join([
+        f"{ticker}: {json.dumps(data)}"
+        for ticker, data in candidates
+    ])
+
+    prompt = f"""
+You are a world-class AI financial analyst trained in market data, investor psychology, and global economic conditions.
+
+You will be shown 10 stock summaries pulled from current data. Choose the **single best stock pick for today**.
+
+Your answer **must include**:
+- Ticker (e.g., AAPL)
+- Pick Type: "Long Hold" or "Short Sell"
+- Stock Type: Blue Chip, Growth, Speculative, ETF, Value, or Penny Stock
+- A 2–4 sentence rationale referencing price trends, volume, valuation, or macroeconomic reasoning
+- A target price (short or long term) and a recommended holding period if applicable
+
+Here is the data:
+{formatted_data}
+
+Return only this JSON:
+{{
+  "ticker": "...",
+  "pick_type": "...",
+  "stock_type": "...",
+  "rationale": "..."
+}}
+"""
+
+    try:
+        response = openai.ChatCompletion.create(
+            model="gpt-4",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.5,
+            max_tokens=500
+        )
+        response_text = response.choices[0].message.content.strip()
+        print("[GPT Output Raw]:", response_text)
+
+        parsed = json.loads(response_text)
+        if parsed.get("ticker") and parsed.get("pick_type") and parsed.get("rationale"):
+            return parsed
+        else:
+            raise ValueError("Incomplete GPT response")
+
+    except Exception as e:
+        print("[AI ERROR]:", e)
+        return {
+            "ticker": None,
+            "rationale": "No valid pick generated today."
+        }
+
+# Optional: test run
+if __name__ == "__main__":
+    print(generate_stock_pick_rationale())
