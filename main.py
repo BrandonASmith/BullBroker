@@ -3,31 +3,23 @@
 import yfinance as yf
 import openai
 import os
+import streamlit as st
 import json
+from ai_engine import get_best_stock_today
 
-openai.api_key = os.getenv("OPENAI_API_KEY")
+st.set_page_config(page_title="BullBroker: Daily Stock Pick", layout="centered")
 
-# Grouped list of quality tickers
-TRACKED_STOCKS = {
-    "blue_chip": ["AAPL", "MSFT", "JNJ", "V", "PG"],
-    "growth": ["NVDA", "TSLA", "AMZN", "META", "GOOGL"],
-    "speculative": ["PLTR", "SOFI", "RIVN", "IONQ", "ARKK"],
-    "etf": ["SPY", "QQQ", "VTI", "DIA", "ARKK"],
-    "value": ["WMT", "CVX", "PFE", "INTC", "KO"],
-    "penny": ["GFAI", "COSM", "MMAT", "HCDI", "IDEX"]
-}
+st.title("📈 BullBroker: Daily Stock Pick")
+st.subheader("Your AI-Powered Investment Strategist")
 
-def fetch_stock_summary(ticker):
-    try:
-        info = yf.Ticker(ticker).info
-        return {
-            "ticker": ticker,
-            "summary": {
-                "currentPrice": info.get("currentPrice"),
-                "marketCap": info.get("marketCap"),
-                "fiftyTwoWeekHigh": info.get("fiftyTwoWeekHigh"),
-                "fiftyTwoWeekLow": info.get("fiftyTwoWeekLow"),
-                "sector": info.ge
+if st.button("📊 Get Today's Pick"):
+    with st.spinner("Analyzing the market..."):
+        pick = get_best_stock_today()
 
-requests.get(url, timeout=30) 
-
+    if pick["ticker"]:
+        st.success(f"**Ticker:** {pick['ticker']}")
+        st.markdown(f"**Type:** {pick['stock_type'].capitalize()}  \n**Strategy:** {pick['pick_type']}")
+        st.markdown("---")
+        st.markdown(f"**Rationale:**\n\n{pick['rationale']}")
+    else:
+        st.error("❌ No valid pick generated today.")
