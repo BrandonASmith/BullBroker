@@ -14,7 +14,7 @@ app.add_middleware(
 
 @app.get("/daily-pick")
 def get_daily_pick():
-    return generate_daily_stock_pick()
+    return generate_daily_pick()
 
 class StockPick(BaseModel):
     ticker: str
