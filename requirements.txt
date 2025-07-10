@@ -7,3 +7,4 @@ python-dotenv
 streamlit
 requests
 plotly
+openai==0.28
