@@ -18,13 +18,13 @@ app.add_middleware(
 def health():
     return {"status": "ok"}
 
+from ai_engine import generate_stock_pick_rationale
+
 @app.get("/daily-pick")
 def daily_pick():
-    try:
-        result = generate_stock_pick_rationale()
-        return result
-    except Exception as e:
-        return {"ticker": None, "rationale": f"Error: {str(e)}"}
+    result = generate_stock_pick_rationale()
+    return result
+
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=10000)
