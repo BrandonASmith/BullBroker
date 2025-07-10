@@ -1,108 +1,78 @@
-# ai_engine.py
 import openai
-import os
 import yfinance as yf
 import random
-from datetime import datetime, timedelta
+import os
+from datetime import datetime
 
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
-# Updated stock tracker list
-stock_tracker = {
-    "blue_chip": ["AAPL", "MSFT", "GOOGL", "JNJ", "JPM", "PG", "V", "NVDA", "UNH", "MA"],
-    "growth": ["TSLA", "SHOP", "SQ", "ROKU", "ETSY", "SE", "U", "COIN", "NET", "DDOG"],
-    "speculative": ["DNA", "ASTR", "BBIG", "MNMD", "FCEL", "NNDM", "SNDL", "BBAI", "AI"],
-    "etf": ["SPY", "QQQ", "VTI", "ARKK", "XLF", "XLE", "XLV", "IWM", "EEM", "DIA"],
-    "value": ["WMT", "KO", "PEP", "MCD", "T", "VZ", "PFE", "MRK", "INTC", "CSCO"],
-    "penny": ["HCMC", "ZOM", "SNDL", "ENZC", "AITX", "CTRM", "CEI", "INND", "ILUS", "PHIL"]
-}
+CANDIDATE_TICKERS = [
+    {"ticker": "MSFT", "type": "blue_chip"},
+    {"ticker": "AAPL", "type": "blue_chip"},
+    {"ticker": "TSLA", "type": "growth"},
+    {"ticker": "NVDA", "type": "growth"},
+    {"ticker": "PLTR", "type": "speculative"},
+    {"ticker": "SOFI", "type": "speculative"},
+    {"ticker": "AMD", "type": "growth"},
+    {"ticker": "GOOGL", "type": "blue_chip"},
+    {"ticker": "AMZN", "type": "blue_chip"},
+    {"ticker": "META", "type": "blue_chip"},
+]
 
-all_tickers = sum(stock_tracker.values(), [])
-
-def fetch_summary(ticker):
-    try:
-        stock = yf.Ticker(ticker)
-        hist = stock.history(period="1mo")
-        info = stock.info
-
-        return {
-            "name": info.get("longName", "N/A"),
-            "sector": info.get("sector", "N/A"),
-            "marketCap": info.get("marketCap", 0),
-            "volume": info.get("volume", 0),
-            "previousClose": info.get("previousClose", 0),
-            "50DayAverage": info.get("fiftyDayAverage", 0),
-            "200DayAverage": info.get("twoHundredDayAverage", 0),
-            "1moHistory": hist.tail(5).to_dict()
-        }
-    except Exception as e:
-        return {"error": str(e)}
-
-def classify_stock_type(ticker):
-    for category, tickers in stock_tracker.items():
-        if ticker in tickers:
-            return category
-    return "unknown"
-
-def determine_pick_type(summary):
-    try:
-        previous = summary["previousClose"]
-        average_50 = summary["50DayAverage"]
-        average_200 = summary["200DayAverage"]
-        market_cap = summary["marketCap"]
-
-        if previous > average_50 and average_50 > average_200 and market_cap > 10_000_000_000:
-            return "Long Hold"
-        elif previous < average_50 and average_50 < average_200:
-            return "Short Sell"
-        else:
-            return "Long Hold" if random.random() > 0.5 else "Short Sell"
-    except:
-        return "Unclear"
-
-def generate_stock_pick_rationale(ticker, summary):
-    stock_type = classify_stock_type(ticker)
-    pick_type = determine_pick_type(summary)
-
-    prompt = (
-        f"You are an AI financial analyst. Analyze {ticker}, a {stock_type} stock."
-        f" Classify the pick type as either Long Hold or Short Sell."
-        f" Provide a clear rationale based on the latest data and news. Include a recommended target price and explain your reasoning."
-    )
-
-    response = openai.ChatCompletion.create(
-        model="gpt-4",
-        messages=[
-            {"role": "system", "content": "You are a professional stock market analyst."},
-            {"role": "user", "content": prompt}
-        ]
-    )
-
-    ai_text = response["choices"][0]["message"]["content"]
-    return {
-        "ticker": ticker,
-        "stock_type": stock_type,
-        "pick_type": pick_type,
-        "rationale": ai_text
-    }
-
-def generate_daily_pick():
-    attempts = 0
-    while attempts < 5:
-        ticker = random.choice(all_tickers)
-        summary = fetch_summary(ticker)
-
-        if "error" in summary or summary["previousClose"] == 0:
-            attempts += 1
+def get_best_stock_today():
+    valid_choices = []
+    for stock in CANDIDATE_TICKERS:
+        try:
+            data = yf.Ticker(stock["ticker"]).history(period="1mo")
+            if not data.empty:
+                valid_choices.append(stock)
+        except Exception as e:
+            print(f"Skipping {stock['ticker']}: {e}")
             continue
 
-        try:
-            return generate_stock_pick_rationale(ticker, summary)
-        except Exception:
-            attempts += 1
+    if not valid_choices:
+        return {
+            "ticker": None,
+            "stock_type": None,
+            "pick_type": None,
+            "rationale": "No valid stocks found after filtering."
+        }
 
-    return {"ticker": None, "rationale": "No valid pick generated today."}
+    pick = random.choice(valid_choices)
+    summary = get_stock_summary(pick["ticker"])
 
-# Optional: test run
-if __name__ == "__main__":
-    print(generate_stock_pick_rationale())
+    rationale = generate_stock_pick_rationale(pick["ticker"], pick["type"], summary)
+
+    return {
+        "ticker": pick["ticker"],
+        "stock_type": pick["type"],
+        "pick_type": "Long Hold",
+        "rationale": rationale
+    }
+
+def get_stock_summary(ticker):
+    try:
+        stock = yf.Ticker(ticker)
+        info = stock.info
+        return f"{info.get('longBusinessSummary', '')}\nMarket Cap: {info.get('marketCap', 'N/A')}\nPE Ratio: {info.get('trailingPE', 'N/A')}"
+    except Exception as e:
+        return "No stock summary available."
+
+def generate_stock_pick_rationale(ticker, stock_type, summary):
+    prompt = f"""
+You are a professional stock analyst. Based on the following summary, generate a clear rationale for why {ticker} is a strong {stock_type} stock pick today. Be concise, include valuation, earnings, trends, and relevant market context.
+
+Summary:
+{summary}
+"""
+
+    try:
+        response = openai.ChatCompletion.create(
+            model="gpt-4",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.7,
+            max_tokens=500
+        )
+        return response.choices[0].message.content.strip()
+    except Exception as e:
+        return f"Error generating rationale: {e}"
