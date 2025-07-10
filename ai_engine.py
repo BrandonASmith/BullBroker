@@ -8,30 +8,32 @@ if not openai.api_key:
 
 def generate_stock_pick_rationale(stock_data_summary, stock_ticker):
     prompt = f"""
-You are an expert financial strategist and investment advisor.
-Using the following stock data and recent trend summary for {stock_ticker}, recommend whether it is best suited for a day trade, an options strategy, or a long-term investment.
+You are an expert investment strategist.
 
-Include:
-1. The pick type (e.g. "Pick Type: Long-Term Investment")
-2. A concise rationale (100–150 words)
+Analyze the following stock data and choose whether {stock_ticker} is best for:
+- A Day Trade
+- An Options Trade
+- A Long-Term Investment
 
-Stock data summary:
+Respond in this **exact format**:
+
+Pick Type: [Day Trade | Options Trade | Long-Term Investment]
+
+[Your 100-150 word rationale.]
+
+Stock Summary:
 {stock_data_summary}
-
-Respond in this format only:
-Pick Type: [type]
-[rationale paragraph]
 """
 
     try:
         response = openai.ChatCompletion.create(
             model="gpt-4",
             messages=[{"role": "user", "content": prompt}],
-            temperature=0.7
+            temperature=0.7,
         )
-        output = response['choices'][0]['message']['content']
-        print(f"✅ GPT-4 OUTPUT for {stock_ticker}:\n{output[:300]}")
-        return output
+        content = response["choices"][0]["message"]["content"]
+        print(f"\n✅ GPT-4 RESPONSE for {stock_ticker}:\n{content}\n")
+        return content
     except Exception as e:
-        print(f"❌ OpenAI request failed: {e}")
-        return None
+        print(f"❌ GPT Error: {e}")
+        return "No rationale received"
