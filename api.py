@@ -2,6 +2,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from ai_engine import generate_daily_pick  # adjust this import as needed
+from pydantic import BaseModel
 
 app = FastAPI()
 
