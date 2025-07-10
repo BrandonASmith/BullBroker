@@ -28,3 +28,6 @@ def fetch_stock_summary(ticker):
                 "fiftyTwoWeekHigh": info.get("fiftyTwoWeekHigh"),
                 "fiftyTwoWeekLow": info.get("fiftyTwoWeekLow"),
                 "sector": info.ge
+
+requests.get(url, timeout=30) 
+
